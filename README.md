@@ -23,8 +23,8 @@ automatically.
 
 ## What it does
 
-- **Public library** — search and filter dumps by university, course, year and tags.
-  Every visitor reads them from the same static files.
+- **Public library** — browse universities → course → categories, with search and
+  progress aggregated at every level. Every visitor reads the same static files.
 - **Your own files** — CSV, TSV, XLSX or XLS, parsed in the browser. Nothing is uploaded.
   Empty option cells and repeated option texts are repaired automatically, and errors are
   reported per row.

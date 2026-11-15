@@ -5,6 +5,7 @@ export type Route =
   | {name: 'import'}
   | {name: 'progress'}
   | {name: 'dump'; id: string}
+  | {name: 'university'; slug: string}
   | {name: 'practice'; sessionId: string}
   | {name: 'results'; sessionId: string};
 
@@ -14,6 +15,9 @@ function parseHash(): Route {
   const parts = path.split('/').filter(Boolean);
 
   if (parts[0] === 'dump' && parts[1]) return {name: 'dump', id: decodeURIComponent(parts[1])};
+  if (parts[0] === 'university' && parts[1]) {
+    return {name: 'university', slug: decodeURIComponent(parts[1])};
+  }
   if (parts[0] === 'practice' && parts[1]) {
     return {name: 'practice', sessionId: decodeURIComponent(parts[1])};
   }
@@ -55,6 +59,8 @@ export function routePath(route: Route): string {
   switch (route.name) {
     case 'dump':
       return `/dump/${encodeURIComponent(route.id)}`;
+    case 'university':
+      return `/university/${encodeURIComponent(route.slug)}`;
     case 'practice':
       return `/practice/${encodeURIComponent(route.sessionId)}`;
     case 'results':

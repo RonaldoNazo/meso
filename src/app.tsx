@@ -20,6 +20,7 @@ import {ImportScreen} from './screens/import';
 import {PracticeScreen} from './screens/practice';
 import {ProgressScreen} from './screens/progress';
 import {ResultsScreen} from './screens/results';
+import {UniversityScreen} from './screens/university';
 
 export function App() {
   const route = useRoute();
@@ -27,6 +28,7 @@ export function App() {
   const isStudy = route.name === 'practice' || route.name === 'results';
   const initial =
     route.name === 'browse' ||
+    route.name === 'university' ||
     route.name === 'dump' ||
     route.name === 'practice' ||
     route.name === 'results';
@@ -90,6 +92,7 @@ export function App() {
                 {route.name === 'browse' ? <BrowseScreen /> : null}
                 {route.name === 'import' ? <ImportScreen /> : null}
                 {route.name === 'progress' ? <ProgressScreen /> : null}
+                {route.name === 'university' ? <UniversityScreen slug={route.slug} /> : null}
                 {route.name === 'dump' ? <DumpScreen id={route.id} /> : null}
                 {route.name === 'practice' ? <PracticeScreen sessionId={route.sessionId} /> : null}
                 {route.name === 'results' ? <ResultsScreen sessionId={route.sessionId} /> : null}

@@ -50,7 +50,20 @@ If a question has no answer anywhere in the original, leave correct_answer empty
 My CSV and the errors:
 [PASTE THE FILE CONTENTS AND THE ERROR LIST HERE]`;
 
-export const PROMPT_TEXT_FILE = {
-  create: 'meso-prompt-create-questions.txt',
-  fix: 'meso-prompt-fix-csv.txt',
-};
+/**
+ * The fix prompt with the app's own row errors already inserted, so a student
+ * only has to paste the file itself.
+ */
+export function buildFixPrompt(issues: ReadonlyArray<{row: number; message: string}>): string {
+  const shown = issues.slice(0, 40).map(issue => `Row ${issue.row}: ${issue.message}`);
+  const more = issues.length > 40 ? [`…and ${issues.length - 40} more.`] : [];
+  const report =
+    shown.length > 0
+      ? `The app reported these rows:\n${[...shown, ...more].join('\n')}`
+      : 'The app did not report a specific row; the CSV structure or quoting is still wrong.';
+
+  return FIX_PROMPT.replace(
+    '[PASTE THE FILE CONTENTS AND THE ERROR LIST HERE]',
+    `${report}\n\nMy CSV (paste the whole file below):\n[PASTE THE CSV HERE]`,
+  );
+}

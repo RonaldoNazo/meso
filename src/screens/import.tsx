@@ -2,18 +2,18 @@ import {useState} from 'react';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
+import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
 import {FileInput} from '@astryxdesign/core/FileInput';
 import {HStack, VStack} from '@astryxdesign/core/Stack';
-import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {Text} from '@astryxdesign/core/Text';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {Copy, Download, Upload} from 'lucide-react';
+import {Copy, Download, Sparkles, Upload} from 'lucide-react';
 
 import {ErrorNote, PageHeader, StatTile} from '../components/page';
 import {messageOf} from '../lib/errors';
 import {MAX_FILE_BYTES, parseFile, saveLocalDump, type ParsedFile} from '../lib/import';
-import {CREATE_PROMPT, FIX_PROMPT, PROMPT_TEXT_FILE} from '../lib/prompts';
+import {buildFixPrompt, CREATE_PROMPT} from '../lib/prompts';
 import {navigate} from '../lib/router';
 import {downloadCsvTemplate, downloadXlsxTemplate} from '../lib/template';
 
@@ -26,7 +26,7 @@ export function ImportScreen() {
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [promptTab, setPromptTab] = useState<'create' | 'fix'>('create');
+  const [aiMode, setAiMode] = useState<'create' | 'fix' | null>(null);
   const [copied, setCopied] = useState(false);
 
   const choose = async (next: File | File[] | null) => {
@@ -70,6 +70,17 @@ export function ImportScreen() {
       <PageHeader
         title="Import questions"
         description="Bring a CSV, TSV or Excel file. It is read in this browser and stored on this device — nothing is uploaded."
+        actions={
+          <Button
+            variant="secondary"
+            label="AI"
+            icon={<Sparkles size={16} />}
+            onClick={() => {
+              setCopied(false);
+              setAiMode('create');
+            }}
+          />
+        }
       />
 
       {error ? <ErrorNote message={error} /> : null}
@@ -141,6 +152,21 @@ export function ImportScreen() {
                     …and {allIssues.length - MAX_ISSUES_SHOWN} more.
                   </Text>
                 ) : null}
+                <HStack justify="between" align="center" gap={2} wrap="wrap">
+                  <Text type="supporting" display="block">
+                    Want these rows repaired? The prompt below already includes this error list.
+                  </Text>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    label="Fix this CSV with AI"
+                    icon={<Sparkles size={14} />}
+                    onClick={() => {
+                      setCopied(false);
+                      setAiMode('fix');
+                    }}
+                  />
+                </HStack>
               </VStack>
             </Banner>
           ) : null}
@@ -181,34 +207,43 @@ export function ImportScreen() {
         </VStack>
       </Card>
 
-      <Card padding={4}>
-        <VStack gap={3}>
-          <Text type="label" weight="bold">
-            Let AI build the CSV
-          </Text>
+      <Dialog
+        isOpen={aiMode !== null}
+        onOpenChange={(open: boolean) => {
+          if (!open) setAiMode(null);
+        }}
+        width={680}
+        maxHeight="82dvh"
+        padding={0}
+      >
+        <DialogHeader
+          title={aiMode === 'fix' ? 'Fix this CSV with AI' : 'Create a CSV with AI'}
+          onOpenChange={(open: boolean) => {
+            if (!open) setAiMode(null);
+          }}
+        />
+        <VStack gap={3} padding={4}>
           <Text type="supporting" display="block" className="meso-wrap">
-            Copy one of these prompts into any AI chat. It already knows the columns, the four
-            question types and the quoting rules that break imports, so what comes back can be
-            imported here as is.
+            {aiMode === 'fix'
+              ? 'Copy the prompt, then paste your CSV where it says so. The AI returns the same questions with the quoting and option problems repaired.'
+              : 'Copy the prompt into any AI chat, attach the document and say how many questions you want. It knows the columns, the four question types and the quoting rules, so the CSV it returns imports here as is.'}
           </Text>
 
-          <TabList
-            value={promptTab}
-            onChange={value => {
-              setPromptTab(value as 'create' | 'fix');
-              setCopied(false);
-            }}
-            hasDivider
-          >
-            <Tab value="create" label="Create from a document" />
-            <Tab value="fix" label="Fix import errors" />
-          </TabList>
-
-          <Text type="supporting" display="block" className="meso-wrap">
-            {promptTab === 'create'
-              ? 'Use this when you only have a PDF, lecture notes or a textbook chapter. Attach the document, say how many questions you want, and the AI returns a CSV in this app’s format.'
-              : 'Use this when the import reports rows. Paste the CSV and the exact error lines the app shows below; the AI returns the same questions with the quoting and option problems repaired.'}
-          </Text>
+          <TextArea
+            label="Prompt"
+            isLabelHidden
+            value={
+              aiMode === 'fix'
+                ? buildFixPrompt(
+                    (parsed?.issues ?? []).filter(issue => issue.level === 'error').length > 0
+                      ? (parsed?.issues ?? []).filter(issue => issue.level === 'error')
+                      : (parsed?.issues ?? []),
+                  )
+                : CREATE_PROMPT
+            }
+            isReadOnly
+            rows={12}
+          />
 
           <HStack gap={2} wrap="wrap">
             <Button
@@ -216,35 +251,22 @@ export function ImportScreen() {
               label={copied ? 'Copied' : 'Copy prompt'}
               icon={<Copy size={16} />}
               onClick={async () => {
-                const text = promptTab === 'create' ? CREATE_PROMPT : FIX_PROMPT;
+                const text =
+                  aiMode === 'fix'
+                    ? buildFixPrompt(
+                        (parsed?.issues ?? []).filter(issue => issue.level === 'error').length > 0
+                          ? (parsed?.issues ?? []).filter(issue => issue.level === 'error')
+                          : (parsed?.issues ?? []),
+                      )
+                    : CREATE_PROMPT;
                 const ok = await copyText(text);
                 setCopied(ok);
                 if (ok) setTimeout(() => setCopied(false), 2000);
               }}
             />
-            <Button
-              variant="secondary"
-              label="Download .txt"
-              icon={<Download size={16} />}
-              onClick={() => {
-                const text = promptTab === 'create' ? CREATE_PROMPT : FIX_PROMPT;
-                downloadText(
-                  promptTab === 'create' ? PROMPT_TEXT_FILE.create : PROMPT_TEXT_FILE.fix,
-                  text,
-                );
-              }}
-            />
           </HStack>
-
-          <TextArea
-            label="Prompt"
-            isLabelHidden
-            value={promptTab === 'create' ? CREATE_PROMPT : FIX_PROMPT}
-            isReadOnly
-            rows={8}
-          />
         </VStack>
-      </Card>
+      </Dialog>
     </VStack>
   );
 }
@@ -266,14 +288,4 @@ async function copyText(text: string): Promise<boolean> {
     helper.remove();
     return copied;
   }
-}
-
-function downloadText(fileName: string, text: string): void {
-  const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

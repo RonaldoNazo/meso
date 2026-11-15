@@ -55,3 +55,29 @@ export function percent(done: number, total: number): number {
   if (total <= 0) return 0;
   return Math.min(100, Math.round((done / total) * 100));
 }
+
+export interface AggregateStats {
+  done: number;
+  total: number;
+  wrong: number;
+  flagged: number;
+  categories: number;
+}
+
+export function aggregateStats(
+  progress: Map<string, ProgressRecord>,
+  dumps: ReadonlyArray<{id: string; count: number}>,
+): AggregateStats {
+  let done = 0;
+  let total = 0;
+  let wrong = 0;
+  let flagged = 0;
+  for (const dump of dumps) {
+    const stats = statsForDump(progress, dump.id);
+    done += stats.done;
+    wrong += stats.wrong;
+    flagged += stats.flagged;
+    total += dump.count;
+  }
+  return {done, total, wrong, flagged, categories: dumps.length};
+}

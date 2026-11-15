@@ -1,5 +1,4 @@
 import {useEffect, useMemo, useState} from 'react';
-import {Badge} from '@astryxdesign/core/Badge';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
@@ -9,18 +8,19 @@ import {HStack, VStack} from '@astryxdesign/core/Stack';
 import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {Play, Upload} from 'lucide-react';
+import {ChevronRight, Play, Upload} from 'lucide-react';
 
+import {DumpRow} from '../components/dump-row';
 import {ErrorNote, PageHeader} from '../components/page';
 import {listSessions} from '../lib/db';
 import {messageOf} from '../lib/errors';
-import {findDump, loadLibraryIndex, localDumps} from '../lib/library';
-import {createSession} from '../lib/sessions';
-import {navigate} from '../lib/router';
-import {statsForDump, overallStats} from '../lib/stats';
+import {loadLibraryIndex, localDumps} from '../lib/library';
 import {useProgress} from '../lib/progress';
+import {navigate} from '../lib/router';
+import {aggregateStats, overallStats} from '../lib/stats';
 import {useSettings} from '../lib/useSettings';
-import type {Dump, DumpMeta, PracticeMode} from '../lib/types';
+import {useStartDump} from '../lib/useStartDump';
+import type {Dump, DumpMeta} from '../lib/types';
 
 interface ResumeInfo {
   sessionId: string;
@@ -29,16 +29,21 @@ interface ResumeInfo {
   total: number;
 }
 
+interface UniversitySummary {
+  slug: string;
+  name: string;
+  dumps: DumpMeta[];
+}
+
 export function BrowseScreen() {
   const {map} = useProgress();
   const [settings] = useSettings();
+  const {start, busyId, error: startError} = useStartDump();
   const [tab, setTab] = useState<'public' | 'mine'>('public');
   const [index, setIndex] = useState<DumpMeta[]>([]);
   const [mine, setMine] = useState<Dump[]>([]);
   const [resume, setResume] = useState<ResumeInfo | null>(null);
   const [query, setQuery] = useState('');
-  const [university, setUniversity] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -68,22 +73,33 @@ export function BrowseScreen() {
   useEffect(load, []);
 
   const universities = useMemo(() => {
-    const set = new Set(index.map(meta => meta.university).filter(Boolean));
-    return [...set].sort((a, b) => a.localeCompare(b));
+    const groups = new Map<string, UniversitySummary>();
+    for (const dump of index) {
+      const slug = dump.uniSlug || dump.university.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const existing = groups.get(slug);
+      if (existing) existing.dumps.push(dump);
+      else groups.set(slug, {slug, name: dump.university, dumps: [dump]});
+    }
+    return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [index]);
 
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return index.filter(meta => {
-      if (university && meta.university !== university) return false;
-      if (!needle) return true;
-      const haystack = [meta.title, meta.university, meta.course, meta.year, ...(meta.tags ?? [])]
+  const needle = query.trim().toLowerCase();
+
+  const matchedUniversities = useMemo(() => {
+    if (!needle) return universities;
+    return universities.filter(uni => uni.name.toLowerCase().includes(needle));
+  }, [universities, needle]);
+
+  const matchedDumps = useMemo(() => {
+    if (!needle) return [];
+    return index.filter(dump =>
+      [dump.title, dump.course, dump.year, ...(dump.tags ?? [])]
         .filter(Boolean)
         .join(' ')
-        .toLowerCase();
-      return haystack.includes(needle);
-    });
-  }, [index, query, university]);
+        .toLowerCase()
+        .includes(needle),
+    );
+  }, [index, needle]);
 
   const resumeTitle = useMemo(() => {
     if (!resume) return '';
@@ -94,51 +110,13 @@ export function BrowseScreen() {
     );
   }, [resume, index, mine]);
 
-  const start = async (id: string, mode: PracticeMode = 'mixed', count?: number) => {
-    setBusyId(id);
-    setError(null);
-    try {
-      const found = await findDump(id);
-      if (!found) throw new Error('That dump could not be found. Import it again or refresh.');
-      const session = await createSession(found.dump, map, mode, count ?? settings.count);
-      navigate(`/practice/${session.id}`);
-    } catch (reason) {
-      setError(messageOf(reason));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   const totals = overallStats(map);
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, DumpMeta[]>();
-    for (const meta of filtered) {
-      const list = map.get(meta.university);
-      if (list) list.push(meta);
-      else map.set(meta.university, [meta]);
-    }
-    return [...map.entries()];
-  }, [filtered]);
-
-  const row = (meta: DumpMeta) => (
-    <DumpRow
-      key={meta.id}
-      meta={meta}
-      done={statsForDump(map, meta.id).done}
-      wrong={statsForDump(map, meta.id).wrong}
-      busy={busyId === meta.id}
-      count={settings.count}
-      onStart={() => start(meta.id)}
-      onOpen={() => navigate(`/dump/${meta.id}`)}
-    />
-  );
 
   return (
     <VStack gap={5}>
       <PageHeader
         title="Practice"
-        description="Choose a dump and start. Progress is stored in this browser only — no account, nothing uploaded."
+        description="Pick your university, then a category. Progress is stored in this browser only — no account, nothing uploaded."
         actions={
           <Button
             variant="secondary"
@@ -150,6 +128,7 @@ export function BrowseScreen() {
       />
 
       {error ? <ErrorNote message={error} onRetry={load} /> : null}
+      {startError ? <ErrorNote message={startError} /> : null}
 
       {resume ? (
         <Banner
@@ -183,112 +162,100 @@ export function BrowseScreen() {
 
       {tab === 'public' ? (
         <VStack gap={4}>
-          <HStack gap={2} wrap="wrap" align="center">
-            <TextInput
-              type="search"
-              label="Search dumps"
-              isLabelHidden
-              placeholder="Search university, course, topic…"
-              value={query}
-              onChange={setQuery}
-              width="100%"
-              hasClear
-            />
-          </HStack>
-
-          {universities.length > 1 ? (
-            <HStack gap={2} wrap="wrap">
-              <Button
-                size="sm"
-                variant={university === null ? 'primary' : 'secondary'}
-                label="All universities"
-                onClick={() => setUniversity(null)}
-              />
-              {universities.map(name => (
-                <Button
-                  key={name}
-                  size="sm"
-                  variant={university === name ? 'primary' : 'secondary'}
-                  label={name}
-                  onClick={() => setUniversity(university === name ? null : name)}
-                />
-              ))}
-            </HStack>
-          ) : null}
+          <TextInput
+            type="search"
+            label="Search"
+            isLabelHidden
+            placeholder="Search university, category or topic…"
+            value={query}
+            onChange={setQuery}
+            hasClear
+          />
 
           {loading ? (
             <Text type="supporting">Loading the library…</Text>
-          ) : filtered.length === 0 ? (
+          ) : index.length === 0 ? (
             <EmptyState
-              title={index.length === 0 ? 'No public dumps yet' : 'Nothing matches that'}
-              description={
-                index.length === 0
-                  ? 'The library is empty. Import your own CSV or Excel file to start practising, or add dumps to the library folder and rebuild.'
-                  : 'Try a different search term or clear the university filter.'
-              }
+              title="No public dumps yet"
+              description="The library is empty. Import your own CSV or Excel file to start practising, or add dumps to the library folder and rebuild."
               actions={
-                index.length === 0 ? (
-                  <Button label="Import a file" variant="primary" onClick={() => navigate('/import')} />
-                ) : (
-                  <Button
-                    label="Clear filters"
-                    variant="secondary"
-                    onClick={() => {
-                      setQuery('');
-                      setUniversity(null);
-                    }}
-                  />
-                )
+                <Button label="Import a file" variant="primary" onClick={() => navigate('/import')} />
               }
             />
-          ) : query.trim() || university ? (
-            <VStack gap={3}>
-              {filtered.map(meta => row(meta))}
-            </VStack>
+          ) : needle ? (
+            matchedUniversities.length === 0 && matchedDumps.length === 0 ? (
+              <EmptyState
+                title="Nothing matches that"
+                description="Try a category like “Kardiologji”, or a university name."
+                actions={
+                  <Button label="Clear search" variant="secondary" onClick={() => setQuery('')} />
+                }
+              />
+            ) : (
+              <VStack gap={4}>
+                {matchedUniversities.length > 0 ? (
+                  <VStack gap={3}>
+                    {matchedUniversities.map(uni => (
+                      <UniversityCard key={uni.slug} university={uni} />
+                    ))}
+                  </VStack>
+                ) : null}
+                {matchedDumps.length > 0 ? (
+                  <VStack gap={3}>
+                    <Text type="label" weight="bold">
+                      Matching categories
+                    </Text>
+                    {matchedDumps.map(meta => (
+                      <DumpRow
+                        key={meta.id}
+                        meta={meta}
+                        done={aggregateStats(map, [meta]).done}
+                        wrong={aggregateStats(map, [meta]).wrong}
+                        busy={busyId === meta.id}
+                        count={settings.count}
+                        onStart={() => void start(meta.id)}
+                        onOpen={() => navigate(`/dump/${meta.id}`)}
+                      />
+                    ))}
+                  </VStack>
+                ) : null}
+              </VStack>
+            )
           ) : (
-            <VStack gap={4}>
-              {grouped.map(([name, items]) => (
-                <VStack key={name} gap={2}>
-                  <Text type="label" weight="bold">
-                    {name}
-                  </Text>
-                  <VStack gap={3}>{items.map(meta => row(meta))}</VStack>
-                </VStack>
+            <VStack gap={3}>
+              {universities.map(uni => (
+                <UniversityCard key={uni.slug} university={uni} />
               ))}
             </VStack>
           )}
         </VStack>
-      ) : (
-        <VStack gap={4}>
-          {mine.length === 0 ? (
-            <EmptyState
-              title="No files imported yet"
-              description="Bring your own questions as CSV, TSV or Excel. They stay on this device."
-              actions={
-                <Button
-                  label="Import a file"
-                  variant="primary"
-                  icon={<Upload size={16} />}
-                  onClick={() => navigate('/import')}
-                />
-              }
+      ) : mine.length === 0 ? (
+        <EmptyState
+          title="No files imported yet"
+          description="Bring your own questions as CSV, TSV or Excel. They stay on this device."
+          actions={
+            <Button
+              label="Import a file"
+              variant="primary"
+              icon={<Upload size={16} />}
+              onClick={() => navigate('/import')}
             />
-          ) : (
-            <VStack gap={3}>
-              {mine.map(dump => (
-                <DumpRow
-                  key={dump.id}
-                  meta={dump}
-                  done={statsForDump(map, dump.id).done}
-                  wrong={statsForDump(map, dump.id).wrong}
-                  busy={busyId === dump.id}
-                  count={settings.count}
-                  onStart={() => start(dump.id)}
-                  onOpen={() => navigate(`/dump/${dump.id}`)}
-                />
-              ))}
-            </VStack>
-          )}
+          }
+        />
+      ) : (
+        <VStack gap={3}>
+          {mine.map(dump => (
+            <DumpRow
+              key={dump.id}
+              meta={dump}
+              done={aggregateStats(map, [dump]).done}
+              wrong={aggregateStats(map, [dump]).wrong}
+              busy={busyId === dump.id}
+              count={settings.count}
+              onStart={() => void start(dump.id)}
+              onOpen={() => navigate(`/dump/${dump.id}`)}
+            />
+          ))}
         </VStack>
       )}
 
@@ -300,66 +267,47 @@ export function BrowseScreen() {
   );
 }
 
-function DumpRow({
-  meta,
-  done,
-  wrong,
-  busy,
-  count,
-  onStart,
-  onOpen,
-}: {
-  meta: DumpMeta;
-  done: number;
-  wrong: number;
-  busy: boolean;
-  count: number;
-  onStart: () => void;
-  onOpen: () => void;
-}) {
-  const total = Math.max(meta.count, done);
-  const metaLine = [meta.university, meta.course, meta.year].filter(Boolean).join(' · ');
-  const startCount = Math.min(count, Math.max(1, total));
+function UniversityCard({university}: {university: UniversitySummary}) {
+  const {map} = useProgress();
+  const stats = aggregateStats(map, university.dumps);
+  const courses = new Set(university.dumps.map(dump => dump.course).filter(Boolean));
 
   return (
     <Card padding={4}>
       <VStack gap={3}>
         <HStack justify="between" align="start" gap={3} wrap="wrap">
           <VStack gap={1} maxWidth={620}>
-            <Heading level={2}>{meta.title}</Heading>
-            {metaLine ? (
-              <Text type="supporting" display="block" className="meso-wrap">
-                {metaLine}
-              </Text>
-            ) : null}
+            <Heading level={2}>{university.name}</Heading>
+            <Text type="supporting" display="block">
+              {stats.categories} categor{stats.categories === 1 ? 'y' : 'ies'} · {stats.total}{' '}
+              questions
+              {courses.size > 0 ? ` · ${[...courses].join(', ')}` : ''}
+            </Text>
           </VStack>
-          <Badge label={`${meta.count} questions`} />
         </HStack>
 
         <VStack gap={1}>
           <ProgressBar
-            label={`${meta.title} progress`}
+            label={`${university.name} progress`}
             isLabelHidden
-            value={Math.min(done, total)}
-            max={total}
+            value={Math.min(stats.done, stats.total)}
+            max={Math.max(stats.total, 1)}
             hasValueLabel
-            variant={done >= total && total > 0 ? 'success' : 'accent'}
+            variant={stats.done >= stats.total && stats.total > 0 ? 'success' : 'accent'}
           />
           <Text type="supporting" display="block">
-            {done} done · {Math.max(0, total - done)} left
-            {wrong > 0 ? ` · ${wrong} to review` : ''}
+            {stats.done} done · {Math.max(0, stats.total - stats.done)} left
+            {stats.wrong > 0 ? ` · ${stats.wrong} to review` : ''}
           </Text>
         </VStack>
 
-        <HStack gap={2} wrap="wrap">
+        <HStack>
           <Button
             variant="primary"
-            label={`Start ${startCount}`}
-            icon={<Play size={16} />}
-            isLoading={busy}
-            onClick={onStart}
+            label="Open categories"
+            icon={<ChevronRight size={16} />}
+            onClick={() => navigate(`/university/${university.slug}`)}
           />
-          <Button variant="secondary" label="Open" onClick={onOpen} />
         </HStack>
       </VStack>
     </Card>
