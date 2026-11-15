@@ -108,17 +108,23 @@ export function questionsFromTable(table: ParsedTable): NormalizeResult {
 
     const optionValues = OPTION_LETTERS.map(letter => cell(column(letter)));
     const lastFilled = optionValues.reduce((last, value, index) => (value ? index : last), -1);
-    const gap = optionValues.findIndex((value, index) => index <= lastFilled && !value);
-    if (gap !== -1) {
+    const compacted = compactOptions(optionValues.slice(0, lastFilled + 1));
+    let options = compacted.options;
+    if (compacted.removedEmpty > 0) {
       issues.push({
         row: rowNumber,
-        level: 'error',
-        message: `Option ${OPTION_LETTERS[gap].toUpperCase()} is empty but a later option is filled. Options must be continuous from A.`,
+        level: 'warning',
+        message: `${compacted.removedEmpty} empty option${compacted.removedEmpty === 1 ? '' : 's'} skipped; answers were remapped.`,
       });
-      return;
+    }
+    if (compacted.removedDuplicate > 0) {
+      issues.push({
+        row: rowNumber,
+        level: 'warning',
+        message: 'Duplicate option text merged; answers were remapped.',
+      });
     }
 
-    let options = optionValues.slice(0, lastFilled + 1);
     const rawAnswer = cell(answerCol);
     const rawType = cell(typeCol).toLowerCase().replace(/\s+/g, '_');
     const declaredType = rawType ? TYPE_ALIASES[rawType] : undefined;
@@ -188,10 +194,6 @@ export function questionsFromTable(table: ParsedTable): NormalizeResult {
       issues.push({row: rowNumber, level: 'error', message: 'Choice questions need at least two options (A and B).'});
       return;
     }
-    if (hasDuplicateOptions(options)) {
-      issues.push({row: rowNumber, level: 'error', message: 'Two options have the same text.'});
-      return;
-    }
 
     const parsed = parseChoiceAnswer(rawAnswer);
     if (!parsed || parsed.length === 0) {
@@ -202,20 +204,30 @@ export function questionsFromTable(table: ParsedTable): NormalizeResult {
       });
       return;
     }
-    if (type === 'single_choice' && parsed.length !== 1) {
-      issues.push({
-        row: rowNumber,
-        level: 'error',
-        message: `single_choice has ${parsed.length} answers (${rawAnswer}). Use multi_choice for more than one.`,
-      });
-      return;
-    }
-    const outOfRange = parsed.find(index => index < 0 || index >= options.length);
+
+    const rawOptionCount = optionValues.slice(0, lastFilled + 1).length;
+    const outOfRange = parsed.find(index => index < 0 || index >= rawOptionCount);
     if (outOfRange !== undefined) {
       issues.push({
         row: rowNumber,
         level: 'error',
-        message: `Answer points at ${OPTION_LETTERS[outOfRange]?.toUpperCase() ?? outOfRange}, but only ${options.length} options are filled.`,
+        message: `Answer points at ${OPTION_LETTERS[outOfRange]?.toUpperCase() ?? outOfRange}, but only ${rawOptionCount} options are filled.`,
+      });
+      return;
+    }
+
+    const remapped = [...new Set(parsed.map(index => compacted.indexMap[index]).filter(index => index >= 0))].sort(
+      (a, b) => a - b,
+    );
+    if (remapped.length === 0) {
+      issues.push({row: rowNumber, level: 'error', message: 'Answer points only at options that were empty.'});
+      return;
+    }
+    if (type === 'single_choice' && remapped.length !== 1) {
+      issues.push({
+        row: rowNumber,
+        level: 'error',
+        message: `single_choice has ${remapped.length} answers (${rawAnswer}). Use multi_choice for more than one.`,
       });
       return;
     }
@@ -225,7 +237,7 @@ export function questionsFromTable(table: ParsedTable): NormalizeResult {
         type,
         stem,
         options,
-        answer: [...new Set(parsed)].sort((a, b) => a - b),
+        answer: remapped,
         explanation: tidy(cell(explanationCol)),
         tags: parseTags(cell(tagsCol)),
         reference: tidy(cell(referenceCol)),
@@ -306,11 +318,46 @@ function parseChoiceAnswer(value: string): number[] | null {
   return indices.length > 0 ? indices : null;
 }
 
-function hasDuplicateOptions(options: string[]): boolean {
-  const set = new Set(options.map(canon));
-  return set.size !== options.length;
-}
-
 function parseTags(value: string): string[] {
   return [...new Set(value.split(/[,;|]/).map(tag => tag.trim()).filter(Boolean))];
+}
+
+interface CompactedOptions {
+  options: string[];
+  /** Old option index → new index, or -1 when the option disappeared. */
+  indexMap: number[];
+  removedEmpty: number;
+  removedDuplicate: number;
+}
+
+/**
+ * Drops empty option cells and merges repeated option texts, keeping a map so
+ * the correct answer letters can follow their option to its new position.
+ */
+function compactOptions(raw: string[]): CompactedOptions {
+  const options: string[] = [];
+  const indexMap: number[] = [];
+  const seen = new Map<string, number>();
+  let removedEmpty = 0;
+  let removedDuplicate = 0;
+
+  raw.forEach((value, index) => {
+    if (!value) {
+      indexMap[index] = -1;
+      removedEmpty++;
+      return;
+    }
+    const key = canon(value);
+    const existing = seen.get(key);
+    if (existing !== undefined) {
+      indexMap[index] = existing;
+      removedDuplicate++;
+      return;
+    }
+    seen.set(key, options.length);
+    indexMap[index] = options.length;
+    options.push(value);
+  });
+
+  return {options, indexMap, removedEmpty, removedDuplicate};
 }

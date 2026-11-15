@@ -27,6 +27,8 @@ interface FolderMeta {
   year?: string;
   license?: string;
   tags?: string[];
+  /** Used when a folder holds one dump named questions.csv. */
+  title?: string;
 }
 
 interface FileMeta extends FolderMeta {
@@ -56,6 +58,30 @@ async function readJson<T>(path: string): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Merges every `_meta.json` from the library root down to the file's folder, so
+ * a university name can live at the top and a category title further down.
+ */
+async function folderMetaFor(relativeDir: string): Promise<FolderMeta> {
+  const parts = relativeDir.split(sep).filter(part => part && part !== '.');
+  const merged: FolderMeta = {};
+  let current = libraryDir;
+
+  for (const part of parts) {
+    current = join(current, part);
+    const next = await readJson<FolderMeta>(join(current, '_meta.json'));
+    if (!next) continue;
+    merged.university = next.university ?? merged.university;
+    merged.course = next.course ?? merged.course;
+    merged.year = next.year ?? merged.year;
+    merged.license = next.license ?? merged.license;
+    merged.title = next.title ?? merged.title;
+    if (next.tags) merged.tags = [...new Set([...(merged.tags ?? []), ...next.tags])];
+  }
+
+  return merged;
 }
 
 async function walk(dir: string): Promise<string[]> {
@@ -91,13 +117,15 @@ async function main() {
   for (const file of files) {
     const relativePath = relative(libraryDir, file);
     const folder = join(file, '..');
-    const folderMeta = (await readJson<FolderMeta>(join(folder, '_meta.json'))) ?? {};
+    const relativeDir = relative(libraryDir, folder);
+    const folderMeta = await folderMetaFor(relativeDir);
     const stem = basename(file).replace(/\.(csv|tsv)$/i, '');
     const fileMeta = (await readJson<FileMeta>(join(folder, `${stem}.meta.json`))) ?? {};
     const meta: FileMeta = {...folderMeta, ...fileMeta};
 
-    const directorySlug = relative(libraryDir, folder).split(sep).filter(Boolean).map(slugify).join('-');
-    const baseId = directorySlug ? `${directorySlug}-${slugify(stem)}` : slugify(stem);
+    const directorySlug = relativeDir.split(sep).filter(Boolean).map(slugify).join('-');
+    const idStem = slugify(stem) === 'questions' ? '' : slugify(stem);
+    const baseId = [directorySlug, idStem].filter(Boolean).join('-');
     let id = baseId || 'dump';
     let suffix = 2;
     while (usedIds.has(id)) id = `${baseId}-${suffix++}`;
@@ -117,12 +145,13 @@ async function main() {
     const fileName = `${id}.csv`;
     await cp(file, join(dumpsDir, fileName));
 
+    const university = meta.university ?? titleize(directorySlug.split('-')[0] ?? 'Library');
     const info = await stat(file);
     dumps.push({
       id,
       title: meta.title ?? titleize(stem),
-      university: meta.university ?? titleize(directorySlug || 'Library'),
-      uniSlug: slugify(directorySlug || 'library'),
+      university,
+      uniSlug: slugify(university),
       course: meta.course,
       year: meta.year,
       tags: [...new Set([...(meta.tags ?? []), ...questions.flatMap(question => question.tags)])].slice(0, 12),

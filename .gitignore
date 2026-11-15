@@ -4,3 +4,6 @@ public/library
 *.log
 .DS_Store
 .vscode
+
+# Local source dumps kept out of the repo
+/Licenca_questions.csv

@@ -26,6 +26,10 @@ automatically.
 - **Public library** — search and filter dumps by university, course, year and tags.
   Every visitor reads them from the same static files.
 - **Your own files** — CSV, TSV, XLSX or XLS, parsed in the browser. Nothing is uploaded.
+  Empty option cells and repeated option texts are repaired automatically, and errors are
+  reported per row.
+- **AI helpers** — the Import page has two copyable prompts: one turns a PDF/document into
+  a valid CSV, the other repairs a file the import rejected.
 - **Four question types** — single choice, multiple choice, true/false and short answer
   (reveal the model answer, then grade yourself).
 - **Progress that follows the question** — answers are keyed by a hash of the question

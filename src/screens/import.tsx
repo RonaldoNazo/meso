@@ -4,13 +4,16 @@ import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {FileInput} from '@astryxdesign/core/FileInput';
 import {HStack, VStack} from '@astryxdesign/core/Stack';
+import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {Text} from '@astryxdesign/core/Text';
+import {TextArea} from '@astryxdesign/core/TextArea';
 import {TextInput} from '@astryxdesign/core/TextInput';
-import {Download, Upload} from 'lucide-react';
+import {Copy, Download, Upload} from 'lucide-react';
 
 import {ErrorNote, PageHeader, StatTile} from '../components/page';
 import {messageOf} from '../lib/errors';
 import {MAX_FILE_BYTES, parseFile, saveLocalDump, type ParsedFile} from '../lib/import';
+import {CREATE_PROMPT, FIX_PROMPT, PROMPT_TEXT_FILE} from '../lib/prompts';
 import {navigate} from '../lib/router';
 import {downloadCsvTemplate, downloadXlsxTemplate} from '../lib/template';
 
@@ -23,6 +26,8 @@ export function ImportScreen() {
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [promptTab, setPromptTab] = useState<'create' | 'fix'>('create');
+  const [copied, setCopied] = useState(false);
 
   const choose = async (next: File | File[] | null) => {
     const chosen = Array.isArray(next) ? next[0] : next;
@@ -122,7 +127,7 @@ export function ImportScreen() {
                   ? `${errors.length} row${errors.length === 1 ? '' : 's'} skipped`
                   : `${warnings.length} warning${warnings.length === 1 ? '' : 's'}`
               }
-              description="Valid rows can still be imported. Fix the file and import it again to add the rest."
+              description="Valid rows can still be imported. Fix the file and import it again to add the rest — or paste the file and these errors into the AI fix prompt at the bottom of this page."
               collapsible={{defaultIsOpen: true}}
             >
               <VStack gap={1}>
@@ -148,7 +153,7 @@ export function ImportScreen() {
             The format
           </Text>
           <Text type="supporting" display="block" className="meso-wrap">
-            Header row: question, question_type, A, B, C, D, correct_answer, explanation, tags,
+            Header row: question, question_type, A, B, C, D, E, correct_answer, explanation, tags,
             user_answer. question_type is single_choice, multi_choice, true_false or short_answer.
             Multi answers are comma separated (A,B); true/false uses true or false; short_answer
             reveals the explanation. user_answer is ignored.
@@ -156,7 +161,8 @@ export function ImportScreen() {
           <Text type="supporting" display="block" className="meso-wrap">
             If you save a comma-separated file, quote any field containing a comma — for example
             tags like &quot;Math,Addition&quot;. Tab-separated files (what a spreadsheet copies out)
-            need no quoting.
+            need no quoting. Empty option cells and repeated option texts are repaired automatically;
+            a question with no correct_answer is skipped.
           </Text>
           <HStack gap={2} wrap="wrap">
             <Button
@@ -174,6 +180,100 @@ export function ImportScreen() {
           </HStack>
         </VStack>
       </Card>
+
+      <Card padding={4}>
+        <VStack gap={3}>
+          <Text type="label" weight="bold">
+            Let AI build the CSV
+          </Text>
+          <Text type="supporting" display="block" className="meso-wrap">
+            Copy one of these prompts into any AI chat. It already knows the columns, the four
+            question types and the quoting rules that break imports, so what comes back can be
+            imported here as is.
+          </Text>
+
+          <TabList
+            value={promptTab}
+            onChange={value => {
+              setPromptTab(value as 'create' | 'fix');
+              setCopied(false);
+            }}
+            hasDivider
+          >
+            <Tab value="create" label="Create from a document" />
+            <Tab value="fix" label="Fix import errors" />
+          </TabList>
+
+          <Text type="supporting" display="block" className="meso-wrap">
+            {promptTab === 'create'
+              ? 'Use this when you only have a PDF, lecture notes or a textbook chapter. Attach the document, say how many questions you want, and the AI returns a CSV in this app’s format.'
+              : 'Use this when the import reports rows. Paste the CSV and the exact error lines the app shows below; the AI returns the same questions with the quoting and option problems repaired.'}
+          </Text>
+
+          <HStack gap={2} wrap="wrap">
+            <Button
+              variant="primary"
+              label={copied ? 'Copied' : 'Copy prompt'}
+              icon={<Copy size={16} />}
+              onClick={async () => {
+                const text = promptTab === 'create' ? CREATE_PROMPT : FIX_PROMPT;
+                const ok = await copyText(text);
+                setCopied(ok);
+                if (ok) setTimeout(() => setCopied(false), 2000);
+              }}
+            />
+            <Button
+              variant="secondary"
+              label="Download .txt"
+              icon={<Download size={16} />}
+              onClick={() => {
+                const text = promptTab === 'create' ? CREATE_PROMPT : FIX_PROMPT;
+                downloadText(
+                  promptTab === 'create' ? PROMPT_TEXT_FILE.create : PROMPT_TEXT_FILE.fix,
+                  text,
+                );
+              }}
+            />
+          </HStack>
+
+          <TextArea
+            label="Prompt"
+            isLabelHidden
+            value={promptTab === 'create' ? CREATE_PROMPT : FIX_PROMPT}
+            isReadOnly
+            rows={8}
+          />
+        </VStack>
+      </Card>
     </VStack>
   );
+}
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    // Older browsers / non-secure contexts.
+    const helper = document.createElement('textarea');
+    helper.value = text;
+    helper.setAttribute('readonly', '');
+    helper.style.position = 'fixed';
+    helper.style.opacity = '0';
+    document.body.appendChild(helper);
+    helper.select();
+    const copied = document.execCommand('copy');
+    helper.remove();
+    return copied;
+  }
+}
+
+function downloadText(fileName: string, text: string): void {
+  const blob = new Blob([text], {type: 'text/plain;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

@@ -55,19 +55,32 @@ valid rest.
 | Empty `question` | error |
 | Unknown `question_type` | error |
 | Fewer than two options on a choice question | error |
-| Gap in the options (`A`, empty `B`, `C`) | error |
 | Answer points at an empty or missing option | error |
 | `single_choice` with more than one answer | error |
 | `true_false` whose answer is not a boolean word | error |
-| Two identical options in one question | error |
+| A gap in the options (`A`, empty `B`, `C`) | repaired: the empty cell is dropped, warnings are shown, answer letters follow their option |
+| Two identical options in one question | repaired: the repeat is merged into the first, answer letters are remapped |
 | Duplicate question (same stem + options + type) | warning, second copy skipped |
 | `short_answer` with no answer text | warning, row skipped |
+| Choice question with no `correct_answer` | error, row skipped |
 
 If `question_type` is missing entirely, the app infers it: no options → short answer;
 `true`/`false` → true/false; two or more answer letters → multiple choice; otherwise
 single choice. Explicit types are always safer.
 
 Limits: 15 MB per file, 20,000 rows per dump.
+
+## Let an AI produce the file
+
+The Import screen has two copyable prompts under **Let AI build the CSV**:
+
+- **Create from a document** — attach a PDF or paste lecture notes, ask for N questions,
+  and get a CSV in this format.
+- **Fix import errors** — paste the file plus the exact error lines, and get the same
+  questions back with quoting and option problems repaired.
+
+Both prompts spell out the header, the four types and the quoting rules, so the output
+imports without a second round of fixing.
 
 ## The quoting trap
 

@@ -7,13 +7,14 @@ database, no API, no admin panel. Adding a dump is a commit.
 
 ```text
 library/
-  unilag/
+  universiteti-mjekesor-i-tiranes/
     _meta.json
-    medicine-anatomy-200l.csv
-    medicine-anatomy-200l.meta.json     # optional, overrides the folder meta
-  uniben/
-    _meta.json
-    law-nigerian-legal-system-100l.tsv
+    farmakologji/
+      _meta.json
+      questions.csv
+    kardiologji/
+      _meta.json
+      questions.csv
 ```
 
 `npm run build` produces:
@@ -21,33 +22,47 @@ library/
 ```text
 public/library/
   index.json
-  dumps/unilag-medicine-anatomy-200l.csv?v=ab12cd
-  dumps/uniben-law-nigerian-legal-system-100l.csv?v=98fe21
+  dumps/universiteti-mjekesor-i-tiranes-farmakologji.csv?v=ab12cd
+  dumps/universiteti-mjekesor-i-tiranes-kardiologji.csv?v=98fe21
 ```
+
+A folder can hold one dump named `questions.csv`, or several files named after the topic.
+`_meta.json` is merged from the library root down, so the university lives once at the top
+and each category folder only adds its title.
 
 `public/library/` is generated and git-ignored. The `?v=` hash changes whenever the file
 content changes, so a browser or CDN cache cannot serve a stale dump.
 
 ## `_meta.json`
 
+Root of a university:
+
 ```json
 {
-  "university": "University of Lagos",
-  "course": "Medicine & Surgery",
-  "year": "200L",
-  "license": "CC BY 4.0",
-  "tags": ["anatomy", "200 level"]
+  "university": "Universiteti Mjekësor i Tiranës",
+  "course": "Licensa",
+  "license": "Study use",
+  "tags": ["medicine", "licensing exam", "Albania"]
+}
+```
+
+Category folder:
+
+```json
+{
+  "title": "Farmakologji",
+  "tags": ["Farmakologji"]
 }
 ```
 
 | Field | Default |
 |---|---|
-| `university` | the folder name, title-cased |
+| `university` | the first folder name, title-cased |
+| `title` | the file name, or the folder's `title` when the file is `questions.csv` |
 | `course`, `year`, `license` | none |
 | `tags` | collected from the questions' own tags, capped at 12 |
 
 The file name becomes the title: `medicine-anatomy-200l` → “Medicine Anatomy 200L”.
-
 Per-file overrides live next to the file, named `<file>.meta.json`:
 
 ```json
