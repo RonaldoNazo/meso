@@ -111,6 +111,29 @@ export function BrowseScreen() {
 
   const totals = overallStats(map);
 
+  const grouped = useMemo(() => {
+    const map = new Map<string, DumpMeta[]>();
+    for (const meta of filtered) {
+      const list = map.get(meta.university);
+      if (list) list.push(meta);
+      else map.set(meta.university, [meta]);
+    }
+    return [...map.entries()];
+  }, [filtered]);
+
+  const row = (meta: DumpMeta) => (
+    <DumpRow
+      key={meta.id}
+      meta={meta}
+      done={statsForDump(map, meta.id).done}
+      wrong={statsForDump(map, meta.id).wrong}
+      busy={busyId === meta.id}
+      count={settings.count}
+      onStart={() => start(meta.id)}
+      onOpen={() => navigate(`/dump/${meta.id}`)}
+    />
+  );
+
   return (
     <VStack gap={5}>
       <PageHeader
@@ -218,19 +241,19 @@ export function BrowseScreen() {
                 )
               }
             />
-          ) : (
+          ) : query.trim() || university ? (
             <VStack gap={3}>
-              {filtered.map(meta => (
-                <DumpRow
-                  key={meta.id}
-                  meta={meta}
-                  done={statsForDump(map, meta.id).done}
-                  wrong={statsForDump(map, meta.id).wrong}
-                  busy={busyId === meta.id}
-                  count={settings.count}
-                  onStart={() => start(meta.id)}
-                  onOpen={() => navigate(`/dump/${meta.id}`)}
-                />
+              {filtered.map(meta => row(meta))}
+            </VStack>
+          ) : (
+            <VStack gap={4}>
+              {grouped.map(([name, items]) => (
+                <VStack key={name} gap={2}>
+                  <Text type="label" weight="bold">
+                    {name}
+                  </Text>
+                  <VStack gap={3}>{items.map(meta => row(meta))}</VStack>
+                </VStack>
               ))}
             </VStack>
           )}

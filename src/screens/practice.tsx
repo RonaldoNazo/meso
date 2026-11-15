@@ -121,10 +121,10 @@ export function PracticeScreen({sessionId}: {sessionId: string}) {
       <Card padding={4} className="meso-enter" key={question.id}>
         <QuestionPane
           question={question}
-          questionNumber={position_}
           isLast={isLast}
           onAnswer={handleAnswer}
           onNext={handleNext}
+          onExit={() => navigate(`/dump/${dump.id}`)}
           onFlag={() => setFlag(question.id, dump.id, !flagged)}
         />
       </Card>
@@ -134,17 +134,17 @@ export function PracticeScreen({sessionId}: {sessionId: string}) {
 
 function QuestionPane({
   question,
-  questionNumber,
   isLast,
   onAnswer,
   onNext,
+  onExit,
   onFlag,
 }: {
   question: Question;
-  questionNumber: number;
   isLast: boolean;
   onAnswer: (picked: number[], correct: boolean) => void;
   onNext: () => void;
+  onExit: () => void;
   onFlag: () => void;
 }) {
   const [picked, setPicked] = useState<number[]>([]);
@@ -194,6 +194,12 @@ function QuestionPane({
     const onKey = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLTextAreaElement) return;
       const key = event.key;
+
+      if (key === 'Escape') {
+        event.preventDefault();
+        onExit();
+        return;
+      }
 
       if (key === 'Enter') {
         if (gradedRef.current) {
@@ -354,8 +360,8 @@ function QuestionPane({
       <HStack justify="between" align="center" gap={2} wrap="wrap">
         <Text type="supporting">
           {question.type === 'short_answer'
-            ? `Enter after grading · F flags · Question ${questionNumber}`
-            : `Keys: 1–${question.options.length} · Enter next · F flags · Question ${questionNumber}`}
+            ? `Enter after grading · Esc exits · F flags`
+            : `Keys: 1–${question.options.length} · Enter next · Esc exits · F flags`}
         </Text>
         {revealed && (isChoice || graded) ? (
           <Button

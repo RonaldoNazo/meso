@@ -48,7 +48,7 @@ export function App() {
     <Theme theme={neutralTheme} mode={settings.theme}>
       <ProgressProvider>
         <AppShell
-          height="auto"
+          height="fill"
           contentPadding={0}
           topNav={
             <TopNav
@@ -82,7 +82,7 @@ export function App() {
           }
         >
           <Layout
-            height="auto"
+            height="fill"
             padding={4}
             contentWidth={isStudy ? 760 : 1040}
             content={
