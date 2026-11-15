@@ -1,0 +1,17 @@
+question	question_type	A	B	C	D	correct_answer	explanation	tags	user_answer
+2 + 2 = ?	single_choice	3	4	5	6	B	2 + 2 = 4	Math,Addition	
+Select the prime numbers	multi_choice	2	3	4	6	A,B	2 and 3 are prime; 4 = 2×2 and 6 = 2×3.	Math,Primes	
+The Earth orbits the Sun	true_false					true	The Earth completes one orbit roughly every 365.25 days.	Science,Astronomy	
+Explain photosynthesis	short_answer					Plants use light energy to turn carbon dioxide and water into glucose and oxygen.	Biology,Plants	
+Which organ pumps blood around the body?	single_choice	Liver	Heart	Lungs	Kidney	B	The heart is a muscular pump with four chambers.	Biology,Anatomy	
+Water boils at 100 °C at sea level	true_false					true	At standard atmospheric pressure water boils at 100 °C.	Science,Physics	
+Select the noble gases	multi_choice	Helium	Oxygen	Neon	Nitrogen	A,C	Helium and neon sit in group 18; oxygen and nitrogen do not.	Chemistry,Elements	
+What is the capital of Japan?	single_choice	Osaka	Kyoto	Tokyo	Nagoya	C	Tokyo has been the capital since 1868.	Geography,Cities	
+DNA is a single-stranded molecule	true_false					false	DNA is double-stranded, forming a double helix.	Biology,Genetics	
+State Newton's second law	short_answer					Force equals mass times acceleration: F = ma.	Physics,Mechanics	
+Which of these are primary colours of light?	multi_choice	Red	Green	Yellow	Blue	A,B,D	Red, green and blue combine to make white light.	Science,Light	
+The Great Wall of China is visible from space with the naked eye	true_false					false	It is too narrow to see from orbit without aid.	History,Myths	
+What does HTML stand for?	single_choice	HyperText Markup Language	HighText Machine Language	HyperTool Markup Language	Home Tool Markup Language	A	HTML describes the structure of web pages.	Computing,Web	
+Solve for x: 3x + 6 = 18	single_choice	x = 2	x = 3	x = 4	x = 6	C	3x = 12, so x = 4.	Math,Algebra	
+Describe the difference between mitosis and meiosis	short_answer	Mitosis produces two identical diploid cells; meiosis produces four genetically different haploid gametes.	Biology,Cell division	
+Which gas do plants take in for photosynthesis?	single_choice	Oxygen	Carbon dioxide	Nitrogen	Hydrogen	B	Carbon dioxide is fixed into glucose during the light-independent reactions.	Biology,Plants	
